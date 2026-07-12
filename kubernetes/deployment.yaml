@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecraft-server
+  namespace: gaming
+  labels:
+    app: minecraft
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minecraft
+  template:
+    metadata:
+      labels:
+        app: minecraft
+    spec:
+      shareProcessNamespace: true
+      containers:
+      - name: minecraft
+        image: eclipse-temurin:21-jre
+        workingDir: /data
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            chmod +x run.sh
+            # Ensure proper memory allocations
+            echo "-Xmx6G" > user_jvm_args.txt
+            echo "-Xms2G" >> user_jvm_args.txt
+            
+            # Wrapper loop to handle start/stop state
+            while true; do
+              STATE=$(cat /data/.server_state 2>/dev/null || echo "running")
+              if [ "$STATE" = "running" ]; then
+                echo "[wrapper] Starting Minecraft server..."
+                ./run.sh
+                echo "[wrapper] Minecraft server stopped."
+                STATE=$(cat /data/.server_state 2>/dev/null || echo "running")
+                if [ "$STATE" = "running" ]; then
+                  echo "[wrapper] Server stopped unexpectedly. Waiting 5s before restart..."
+                  sleep 5
+                fi
+              else
+                sleep 2
+              fi
+            done
+        ports:
+        - containerPort: 25565
+          name: minecraft
+          protocol: TCP
+        - containerPort: 24454
+          name: voice
+          protocol: UDP
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+          limits:
+            memory: "6Gi"
+            cpu: "4"
+        volumeMounts:
+        - name: server-volume
+          mountPath: /data
+      - name: control-panel
+        image: node:20-alpine
+        workingDir: /app
+        command: ["node", "server.js"]
+        env:
+        - name: PANEL_USERNAME
+          value: "admin" # Set your own username
+        - name: PANEL_PASSWORD
+          value: "minecraft" # Set your own password (we recommend using secrets)
+        ports:
+        - containerPort: 8080
+          name: panel-http
+        volumeMounts:
+        - name: server-volume
+          mountPath: /data
+        - name: panel-code
+          mountPath: /app
+      - name: sftp
+        image: atmoz/sftp:latest
+        args: ["admin:minecraft:0:0:data"] # Format: username:password:uid:gid:jailed_dir
+        ports:
+        - containerPort: 22
+          name: sftp
+        volumeMounts:
+        - name: server-volume
+          mountPath: /home/admin/data
+      volumes:
+      - name: server-volume
+        persistentVolumeClaim:
+          claimName: minecraft-data
+      - name: panel-code
+        configMap:
+          name: minecraft-panel-config

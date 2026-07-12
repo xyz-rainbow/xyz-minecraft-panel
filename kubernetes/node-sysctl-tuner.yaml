@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-sysctl-tuner
+  namespace: kube-system
+  labels:
+    app: node-sysctl-tuner
+spec:
+  selector:
+    matchLabels:
+      app: node-sysctl-tuner
+  template:
+    metadata:
+      labels:
+        app: node-sysctl-tuner
+    spec:
+      hostPID: true
+      hostNetwork: true
+      initContainers:
+      - name: sysctl-tuner
+        image: alpine:latest
+        securityContext:
+          privileged: true
+        command:
+        - sh
+        - -c
+        - |
+          echo "Setting host sysctl inotify limits..."
+          sysctl -w fs.inotify.max_user_instances=2048
+          sysctl -w fs.inotify.max_user_watches=524288
+          echo "Current limits:"
+          sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches
+        resources:
+          limits:
+            cpu: 100m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+      containers:
+      - name: sleeper
+        image: alpine:latest
+        command: ["sleep", "infinity"]
+        resources:
+          limits:
+            cpu: 50m
+            memory: 20Mi
+          requests:
+            cpu: 5m
+            memory: 5Mi
