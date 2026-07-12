@@ -76,7 +76,7 @@
     <g transform="translate(20, 45)">
       <rect width="210" height="85" rx="10" fill="rgba(139, 92, 246, 0.05)" stroke="url(#purpleGrad)" stroke-width="1.5" />
       <text x="15" y="25" fill="white" font-size="12" font-family="'Inter', sans-serif" font-weight="bold">control-panel (Node.js)</text>
-      <text x="15" y="45" fill="#94a3b8" font-size="10" font-family="'Inter', sans-serif">Web SPA Explorer & Console</text>
+      <text x="15" y="45" fill="#94a3b8" font-size="10" font-family="'Inter', sans-serif">Web SPA Explorer &amp; Console</text>
       <!-- Port Badge -->
       <rect x="15" y="58" width="55" height="16" rx="4" fill="rgba(139, 92, 246, 0.2)" />
       <text x="42" y="70" fill="white" font-size="9" font-family="'Fira Code', monospace" font-weight="bold" text-anchor="middle">8080/TCP</text>
@@ -127,7 +127,7 @@
         <rect width="115" height="70" rx="8" fill="rgba(217, 119, 6, 0.03)" stroke="rgba(217, 119, 6, 0.2)" />
         <text x="57" y="22" fill="white" font-size="9" font-family="'Inter', sans-serif" font-weight="bold" text-anchor="middle">ConfigMap</text>
         <text x="57" y="40" fill="#fbbf24" font-size="8" font-family="'Fira Code', monospace" text-anchor="middle">panel-code</text>
-        <text x="57" y="54" fill="#fbbf24" font-size="8" font-family="'Fira Code', monospace" text-anchor="middle">(server & html)</text>
+        <text x="57" y="54" fill="#fbbf24" font-size="8" font-family="'Fira Code', monospace" text-anchor="middle">(server &amp; html)</text>
       </g>
     </g>
   </g>
