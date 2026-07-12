@@ -71,7 +71,7 @@ spec:
         - name: PANEL_USERNAME
           value: "admin" # Set your own username
         - name: PANEL_PASSWORD
-          value: "minecraft" # Set your own password (we recommend using secrets)
+          value: "admin" # Set your own password (we recommend using secrets)
         ports:
         - containerPort: 8080
           name: panel-http
@@ -82,7 +82,7 @@ spec:
           mountPath: /app
       - name: sftp
         image: atmoz/sftp:latest
-        args: ["admin:minecraft:0:0:data"] # Format: username:password:uid:gid:jailed_dir
+        args: ["admin:admin:0:0:data"] # Format: username:password:uid:gid:jailed_dir
         ports:
         - containerPort: 22
           name: sftp

@@ -8,7 +8,7 @@ const { exec } = require('child_process');
 const PORT = 8080;
 const DATA_DIR = '/data';
 const PANEL_USER = process.env.PANEL_USERNAME || 'admin';
-const PANEL_PASS = process.env.PANEL_PASSWORD || 'minecraft';
+const PANEL_PASS = process.env.PANEL_PASSWORD || 'admin';
 const SESSION_COOKIE = 'panel_session';
 const STATE_FILE = path.join(DATA_DIR, '.server_state');
 
