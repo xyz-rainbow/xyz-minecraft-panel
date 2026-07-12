@@ -4,9 +4,7 @@ A premium, ultra-lightweight, and secure **Minecraft Web Control Panel & SFTP Si
 
 It features real-time log streaming (SSE), a file explorer with drag-and-drop uploads, an in-browser code editor, RCON console execution, SLP status polling, and state-loop wrapper controls to safely stop, start, and restart your server without bringing down the sidecars.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/xyz-rainbow/xyz-minecraft-panel/main/images/architecture.svg" alt="Architecture Diagram" width="800" />
-</p>
+![Architecture Diagram](images/architecture.svg)
 
 ---
 
