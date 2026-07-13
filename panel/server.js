@@ -14,6 +14,7 @@ const STATE_FILE = path.join(DATA_DIR, '.server_state');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 let backupInProgress = false;
 let restoreInProgress = false;
+const activeZipDownloads = new Map();
 
 // Helper to parse server.properties
 function getRconConfig() {
@@ -637,6 +638,14 @@ const server = http.createServer((req, res) => {
             }
             
             const folderName = path.basename(targetPath) || 'root';
+
+            // Kill existing zip process for this specific folder to prevent duplicates
+            if (activeZipDownloads.has(targetPath)) {
+                console.log(`[Download Folder] Killing previous zip process for ${targetPath}`);
+                const oldProc = activeZipDownloads.get(targetPath);
+                oldProc.kill('SIGKILL');
+                activeZipDownloads.delete(targetPath);
+            }
             
             res.writeHead(200, {
                 'Content-Type': 'application/zip',
@@ -644,16 +653,30 @@ const server = http.createServer((req, res) => {
             });
             
             const { spawn } = require('child_process');
-            const zipProc = spawn('zip', ['-1', '-r', '-', '.', '-x', 'backups/*', '-x', 'lost+found/*'], { cwd: targetPath });
+            // Added -n .jar to avoid re-compressing mods, speeding up the process
+            const zipProc = spawn('zip', ['-1', '-n', '.jar', '-r', '-', '.', '-x', 'backups/*', '-x', 'lost+found/*'], { cwd: targetPath });
             
+            activeZipDownloads.set(targetPath, zipProc);
+
             zipProc.stdout.pipe(res);
             
             zipProc.stderr.on('data', (data) => {
                 console.error(`[Download Folder] Zip log: ${data.toString().trim()}`);
             });
             
+            zipProc.on('exit', () => {
+                if (activeZipDownloads.get(targetPath) === zipProc) {
+                    activeZipDownloads.delete(targetPath);
+                }
+            });
+
             req.on('close', () => {
-                zipProc.kill();
+                if (!zipProc.killed) {
+                    zipProc.kill('SIGKILL');
+                }
+                if (activeZipDownloads.get(targetPath) === zipProc) {
+                    activeZipDownloads.delete(targetPath);
+                }
             });
         } catch (e) {
             sendJSON(res, { error: e.message }, 400);
