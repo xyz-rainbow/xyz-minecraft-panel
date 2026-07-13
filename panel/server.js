@@ -11,6 +11,9 @@ const PANEL_USER = process.env.PANEL_USERNAME || 'admin';
 const PANEL_PASS = process.env.PANEL_PASSWORD || 'admin';
 const SESSION_COOKIE = 'panel_session';
 const STATE_FILE = path.join(DATA_DIR, '.server_state');
+const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
+let backupInProgress = false;
+let restoreInProgress = false;
 
 // Helper to parse server.properties
 function getRconConfig() {
@@ -621,6 +624,282 @@ const server = http.createServer((req, res) => {
         req.on('close', () => {
             clearInterval(watchInterval);
             res.end();
+        });
+        return;
+    }
+
+    // API Endpoint: Download Folder as Zip (on-the-fly streaming)
+    if (pathname === '/api/download-folder') {
+        try {
+            const targetPath = resolveSafePath(queryPath);
+            if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isDirectory()) {
+                return sendJSON(res, { error: 'Directory not found' }, 404);
+            }
+            
+            const folderName = path.basename(targetPath) || 'root';
+            
+            res.writeHead(200, {
+                'Content-Type': 'application/zip',
+                'Content-Disposition': `attachment; filename="${folderName}.zip"`
+            });
+            
+            const { spawn } = require('child_process');
+            const zipProc = spawn('zip', ['-1', '-r', '-', '.', '-x', 'backups/*', '-x', 'lost+found/*'], { cwd: targetPath });
+            
+            zipProc.stdout.pipe(res);
+            
+            zipProc.stderr.on('data', (data) => {
+                console.error(`[Download Folder] Zip log: ${data.toString().trim()}`);
+            });
+            
+            req.on('close', () => {
+                zipProc.kill();
+            });
+        } catch (e) {
+            sendJSON(res, { error: e.message }, 400);
+        }
+        return;
+    }
+
+    // API Endpoint: List Backups
+    if (pathname === '/api/backups') {
+        if (!fs.existsSync(BACKUPS_DIR)) {
+            try { fs.mkdirSync(BACKUPS_DIR, { recursive: true }); } catch (e) {}
+        }
+        fs.readdir(BACKUPS_DIR, (err, files) => {
+            if (err) return sendJSON(res, { error: err.message }, 500);
+            
+            const list = [];
+            files.forEach(file => {
+                if (!file.endsWith('.zip')) return;
+                try {
+                    const stat = fs.statSync(path.join(BACKUPS_DIR, file));
+                    const match = file.match(/^backup_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:_(.*))?\.zip$/);
+                    let dateStr = stat.mtime.toLocaleString();
+                    let label = '';
+                    if (match) {
+                        dateStr = `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
+                        label = match[7] ? decodeURIComponent(match[7].replace(/_/g, ' ')) : '';
+                    }
+                    list.push({
+                        filename: file,
+                        size: stat.size,
+                        date: dateStr,
+                        label: label,
+                        mtime: stat.mtimeMs
+                    });
+                } catch (e) {}
+            });
+            // Sort by mtime descending
+            list.sort((a, b) => b.mtime - a.mtime);
+            sendJSON(res, { success: true, backups: list, backupInProgress, restoreInProgress });
+        });
+        return;
+    }
+
+    // API Endpoint: Create Backup
+    if (pathname === '/api/backups/create') {
+        if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+        if (backupInProgress || restoreInProgress) {
+            return sendJSON(res, { error: 'An operation is already in progress' }, 400);
+        }
+        
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            let label = '';
+            try {
+                const parsed = JSON.parse(body);
+                label = parsed.label ? encodeURIComponent(parsed.label.trim().replace(/\s+/g, '_')) : '';
+            } catch (e) {}
+            
+            backupInProgress = true;
+            
+            // Format file name
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const dateStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+            const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+            const zipName = `backup_${dateStr}_${timeStr}${label ? '_' + label : ''}.zip`;
+            const zipPath = path.join(BACKUPS_DIR, zipName);
+            
+            if (!fs.existsSync(BACKUPS_DIR)) {
+                try { fs.mkdirSync(BACKUPS_DIR, { recursive: true }); } catch (e) {}
+            }
+            
+            // Check if server is online via SLP
+            const rcon = getRconConfig();
+            pingMinecraft('127.0.0.1', rcon.gamePort)
+                .then(() => {
+                    // Server is online, run RCON save-off & save-all flush
+                    console.log('[Backup] Server is online. Pausing autosave...');
+                    return sendRconCommand('save-off')
+                        .then(() => sendRconCommand('save-all flush'))
+                        .then(() => true)
+                        .catch(err => {
+                            console.error('[Backup] RCON commands failed, proceeding without lock:', err.message);
+                            return false; // proceed without lock
+                        });
+                })
+                .catch(() => {
+                    // Server is offline, proceed directly
+                    console.log('[Backup] Server is offline. Proceeding directly...');
+                    return Promise.resolve(false);
+                })
+                .then((wasLocked) => {
+                    // Start the compression command
+                    const cmd = `zip -1 -r -q "${zipPath}" . -x "backups/*" -x "lost+found/*"`;
+                    console.log(`[Backup] Executing compression: ${cmd}`);
+                    exec(cmd, { cwd: DATA_DIR }, (err, stdout, stderr) => {
+                        if (err) {
+                            console.error('[Backup] Compression failed:', err.message);
+                        } else {
+                            console.log('[Backup] Compression completed successfully.');
+                        }
+                        
+                        // Turn autosave back on if it was locked
+                        if (wasLocked) {
+                            console.log('[Backup] Resuming autosave...');
+                            sendRconCommand('save-on')
+                                .catch(err => console.error('[Backup] Failed to resume autosave:', err.message))
+                                .finally(() => {
+                                    backupInProgress = false;
+                                });
+                        } else {
+                            backupInProgress = false;
+                        }
+                    });
+                    
+                    sendJSON(res, { success: true, message: 'Backup started in background' });
+                });
+        });
+        return;
+    }
+
+    // API Endpoint: Delete Backup
+    if (pathname === '/api/backups/delete') {
+        if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { filename } = JSON.parse(body);
+                if (!filename || !filename.endsWith('.zip') || filename.includes('/') || filename.includes('..')) {
+                    return sendJSON(res, { error: 'Invalid filename' }, 400);
+                }
+                const targetFile = path.join(BACKUPS_DIR, filename);
+                if (fs.existsSync(targetFile)) {
+                    fs.unlink(targetFile, (err) => {
+                        if (err) return sendJSON(res, { error: err.message }, 500);
+                        sendJSON(res, { success: true });
+                    });
+                } else {
+                    sendJSON(res, { error: 'File not found' }, 404);
+                }
+            } catch (e) {
+                sendJSON(res, { error: 'Invalid body' }, 400);
+            }
+        });
+        return;
+    }
+
+    // API Endpoint: Download Backup
+    if (pathname === '/api/backups/download') {
+        const fileParam = queryPath;
+        if (!fileParam || !fileParam.endsWith('.zip') || fileParam.includes('/') || fileParam.includes('..')) {
+            return sendJSON(res, { error: 'Invalid filename' }, 400);
+        }
+        const targetFile = path.join(BACKUPS_DIR, fileParam);
+        if (fs.existsSync(targetFile)) {
+            res.writeHead(200, {
+                'Content-Type': 'application/zip',
+                'Content-Disposition': `attachment; filename="${fileParam}"`,
+                'Content-Length': fs.statSync(targetFile).size
+            });
+            const stream = fs.createReadStream(targetFile);
+            stream.pipe(res);
+        } else {
+            sendJSON(res, { error: 'File not found' }, 404);
+        }
+        return;
+    }
+
+    // API Endpoint: Restore Backup
+    if (pathname === '/api/backups/restore') {
+        if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+        if (backupInProgress || restoreInProgress) {
+            return sendJSON(res, { error: 'An operation is already in progress' }, 400);
+        }
+        
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { filename } = JSON.parse(body);
+                if (!filename || !filename.endsWith('.zip') || filename.includes('/') || filename.includes('..')) {
+                    return sendJSON(res, { error: 'Invalid filename' }, 400);
+                }
+                const zipPath = path.join(BACKUPS_DIR, filename);
+                if (!fs.existsSync(zipPath)) {
+                    return sendJSON(res, { error: 'Backup file not found' }, 404);
+                }
+                
+                restoreInProgress = true;
+                setTargetState('stopped');
+                
+                console.log('[Restore] Stopping Minecraft server for restoration...');
+                sendRconCommand('stop')
+                    .catch(err => {
+                        console.log('[Restore] RCON stop failed, forcing pkill: ', err.message);
+                        return new Promise((resolve) => exec('pkill -f java', resolve));
+                    })
+                    .then(() => {
+                        return new Promise((resolve) => setTimeout(resolve, 3000));
+                    })
+                    .then(() => {
+                        console.log('[Restore] Cleaning active files in /data...');
+                        fs.readdir(DATA_DIR, (err, items) => {
+                            if (err) throw err;
+                            
+                            let pending = items.length;
+                            if (pending === 0) return performUnzip();
+                            
+                            items.forEach(item => {
+                                if (item === 'backups' || item === '.server_state' || item === 'lost+found') {
+                                    pending--;
+                                    if (pending === 0) performUnzip();
+                                    return;
+                                }
+                                
+                                const itemPath = path.join(DATA_DIR, item);
+                                fs.rm(itemPath, { recursive: true, force: true }, (errrm) => {
+                                    if (errrm) console.error(`[Restore] Failed to delete ${item}:`, errrm.message);
+                                    pending--;
+                                    if (pending === 0) performUnzip();
+                                });
+                            });
+                        });
+                    });
+                
+                function performUnzip() {
+                    console.log(`[Restore] Extracting backup ${zipPath}...`);
+                    exec(`unzip -q -o "${zipPath}" -d "${DATA_DIR}"`, (err, stdout, stderr) => {
+                        if (err) {
+                            console.error('[Restore] Unzip failed:', err.message);
+                            restoreInProgress = false;
+                            return;
+                        }
+                        
+                        console.log('[Restore] Unzip completed. Restarting Minecraft server...');
+                        setTargetState('running');
+                        restoreInProgress = false;
+                    });
+                }
+                
+                sendJSON(res, { success: true, message: 'Restore started. Server will restart.' });
+            } catch (e) {
+                sendJSON(res, { error: 'Invalid body' }, 400);
+            }
         });
         return;
     }

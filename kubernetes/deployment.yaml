@@ -66,7 +66,11 @@ spec:
       - name: control-panel
         image: node:20-alpine
         workingDir: /app
-        command: ["node", "server.js"]
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            apk add --no-cache zip unzip
+            node server.js
         env:
         - name: PANEL_USERNAME
           value: "admin" # Set your own username
