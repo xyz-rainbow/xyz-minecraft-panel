@@ -487,7 +487,11 @@ const server = http.createServer((req, res) => {
             const targetFile = resolveSafePath(queryPath);
             fs.readFile(targetFile, (err, data) => {
                 if (err) return sendJSON(res, { error: err.message }, 500);
-                res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+                const fileName = path.basename(targetFile);
+                res.writeHead(200, { 
+                    'Content-Type': 'application/octet-stream',
+                    'Content-Disposition': `attachment; filename="${fileName}"`
+                });
                 res.end(data);
             });
         } catch (e) {

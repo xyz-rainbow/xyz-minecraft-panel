@@ -4,49 +4,174 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Minecraft Server Control Panel</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-main: #06050f;
-            --accent-primary: #8b5cf6;
+            --bg-main: #09090b;
+            --accent-primary: #a855f7;
             --accent-secondary: #06b6d4;
-            --glass-bg: rgba(17, 25, 40, 0.65);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
+            --accent-lime: #84cc16;
+            --accent-pink: #d946ef;
+            --glass-bg: rgba(10, 10, 12, 0.90);
+            --glass-border: rgba(255, 255, 255, 0.06);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', 'Comfortaa', sans-serif;
         }
 
         body {
-            background: radial-gradient(circle at top, #1e1b4b, #0f172a, var(--bg-main));
+            background-color: var(--bg-main);
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
             color: var(--text-main);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Ambient Glow Blobs */
+        .bg-glow-container {
+            position: fixed;
+            inset: 0;
+            opacity: 0.3;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .bg-glow-1 {
+            position: absolute;
+            top: 10%;
+            left: 5%;
+            width: 45vw; height: 45vw;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--accent-lime) 0%, transparent 65%);
+            filter: blur(100px);
+        }
+        .bg-glow-2 {
+            position: absolute;
+            bottom: 5%;
+            right: 5%;
+            width: 50vw; height: 50vw;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--accent-primary) 0%, transparent 65%);
+            filter: blur(100px);
+        }
+        .bg-glow-3 {
+            position: absolute;
+            top: 50%;
+            left: 55%;
+            width: 40vw; height: 40vw;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--accent-secondary) 0%, transparent 65%);
+            filter: blur(120px);
+        }
+
+        /* RGB Border Animation for Dashboard */
+        @keyframes rotate-conic {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .dashboard-rgb-wrapper {
+            position: relative;
+            overflow: hidden;
+            border-radius: 22px;
+            padding: 2px;
+            width: 100%;
+            height: 100vh;
+            z-index: 1;
+            box-shadow: 0 0 60px -15px rgba(132, 204, 22, 0.15);
+        }
+        .dashboard-rgb-wrapper::before {
+            content: '';
+            position: absolute;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: conic-gradient(
+                from 0deg,
+                var(--accent-lime),
+                var(--accent-primary),
+                var(--accent-pink),
+                var(--accent-secondary),
+                var(--accent-lime)
+            );
+            animation: rotate-conic 12s linear infinite;
+            z-index: 0;
+            opacity: 0.8;
+        }
+
+        /* Floating Cyan Scrollbar */
+        ::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: var(--accent-secondary);
+            border-radius: 10px;
+            border: 3px solid transparent;
+            background-clip: padding-box;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: #0891b2;
         }
 
         /* Login Interface */
+        #login-wrapper {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #03040b;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: 1000;
+        }
+
+        .rgb-border-wrapper {
+            position: relative;
+            padding: 3px;
+            border-radius: 23px;
+            background: linear-gradient(45deg, #ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8, #ff0000);
+            background-size: 400%;
+            animation: rgbBorder 10s linear infinite;
+        }
+
+        @keyframes rgbBorder {
+            0% { background-position: 0 0; }
+            100% { background-position: 400% 0; }
+        }
+
         #login-container {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             width: 100%;
+            min-width: 380px;
             max-width: 420px;
             padding: 2.5rem;
             border-radius: 20px;
-            background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            background: #111827;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
             text-align: center;
             animation: fadeIn 0.5s ease-out;
         }
@@ -58,6 +183,13 @@
             background: linear-gradient(135deg, #a78bfa, #22d3ee);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+
+        .lime-text {
+            background: none !important;
+            -webkit-background-clip: unset !important;
+            -webkit-text-fill-color: #a3e635 !important;
+            color: #a3e635;
         }
 
         #login-container p {
@@ -124,17 +256,19 @@
         /* Dashboard Interface */
         #dashboard-container {
             display: none;
-            width: 95vw;
-            max-width: 1400px;
-            height: 90vh;
-            border-radius: 24px;
+            width: 100%;
+            height: 100%;
+            border-radius: 20px;
             background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border: none;
+            box-shadow: none;
             overflow: hidden;
             grid-template-columns: 260px 1fr;
             animation: fadeIn 0.4s ease-out;
+            position: relative;
+            z-index: 1;
         }
 
         /* Sidebar */
@@ -476,6 +610,7 @@
             padding: 0.85rem 1.25rem;
             border-bottom: 1px solid var(--glass-border);
             font-size: 0.9rem;
+            vertical-align: middle;
         }
 
         th {
@@ -491,8 +626,16 @@
             transition: background 0.2s;
         }
 
+        tbody tr:nth-child(odd) {
+            background: rgba(15, 23, 42, 0.4);
+        }
+
+        tbody tr:nth-child(even) {
+            background: rgba(30, 41, 59, 0.4);
+        }
+
         tr:hover {
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(255, 255, 255, 0.08) !important;
         }
 
         .file-name-cell {
@@ -665,22 +808,34 @@
 <body>
 
     <!-- Login Container -->
-    <div id="login-container">
-        <h1>Minecraft Control Panel</h1>
-        <p>Enter administrative credentials to log in.</p>
-        <div class="input-group">
-            <label for="username">Username</label>
-            <input type="text" id="username" placeholder="e.g. admin">
+    <div id="login-wrapper">
+        <div class="rgb-border-wrapper">
+            <div id="login-container">
+                <h1><span class="lime-text">Minecraft</span> Control Panel</h1>
+                <p>Enter administrative credentials to log in.</p>
+                <div class="input-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="e.g. admin">
+                </div>
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="••••••••">
+                </div>
+                <button class="btn" onclick="login()">Sign In</button>
+            </div>
         </div>
-        <div class="input-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" placeholder="••••••••">
-        </div>
-        <button class="btn" onclick="login()">Sign In</button>
     </div>
 
-    <!-- Dashboard Container -->
-    <div id="dashboard-container">
+    <!-- Ambient background blobs -->
+    <div class="bg-glow-container">
+        <div class="bg-glow-1"></div>
+        <div class="bg-glow-2"></div>
+        <div class="bg-glow-3"></div>
+    </div>
+
+    <!-- Dashboard Container wrapped in RGB border -->
+    <div class="dashboard-rgb-wrapper" id="dashboard-rgb-wrapper" style="display:none; width:95vw; max-width:1400px; height:90vh;">
+        <div id="dashboard-container">
         <aside>
             <div>
                 <div class="brand">
@@ -815,7 +970,9 @@
                     </table>
                 </div>
             </div>
+            </div>
         </main>
+    </div>
     </div>
 
     <!-- Editor Modal -->
@@ -848,7 +1005,8 @@
         };
 
         function showDashboard() {
-            document.getElementById('login-container').style.display = 'none';
+            document.getElementById('login-wrapper').style.display = 'none';
+            document.getElementById('dashboard-rgb-wrapper').style.display = 'block';
             document.getElementById('dashboard-container').style.display = 'grid';
             startStatusPolling();
             startLogStream();
@@ -1348,9 +1506,11 @@
                     const tr = document.createElement('tr');
                     tr.onclick = () => loadDir(parentPath);
                     tr.innerHTML = `
-                        <td class="file-name-cell">
-                            <svg class="file-icon folder-icon" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
-                            <span>..</span>
+                        <td>
+                            <div class="file-name-cell">
+                                <svg class="file-icon folder-icon" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+                                <span>..</span>
+                            </div>
                         </td>
                         <td>-</td>
                         <td>-</td>
@@ -1378,23 +1538,30 @@
                     const sizeStr = file.isDir ? '-' : formatBytes(file.size);
                     
                     tr.innerHTML = `
-                        <td class="file-name-cell">
-                            ${file.isDir 
-                                ? `<svg class="file-icon folder-icon" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
-                                : `<svg class="file-icon" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`
-                            }
-                            <span>${file.name}</span>
+                        <td>
+                            <div class="file-name-cell">
+                                ${file.isDir 
+                                    ? `<svg class="file-icon folder-icon" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
+                                    : `<svg class="file-icon" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`
+                                }
+                                <span>${file.name}</span>
+                            </div>
                         </td>
                         <td>${sizeStr}</td>
                         <td>${dateStr}</td>
-                        <td class="actions-cell" onclick="event.stopPropagation()">
-                            ${!file.isDir ? `
-                            <button class="action-icon" title="Download" onclick="downloadFile('${fullFilePath}')">
-                                <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
-                            </button>` : ''}
-                            <button class="action-icon delete-btn" title="Delete" onclick="deleteItem('${fullFilePath}', ${file.isDir})">
-                                <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                            </button>
+                        <td onclick="event.stopPropagation()">
+                            <div class="actions-cell">
+                                <button class="action-icon delete-btn" title="Delete" onclick="deleteItem('${fullFilePath}', ${file.isDir})">
+                                    <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                </button>
+                                ${!file.isDir ? `
+                                <button class="action-icon" title="Download File" onclick="downloadFile('${fullFilePath}')">
+                                    <svg viewBox="0 0 24 24" style="fill: #a3e635;"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+                                </button>` : `
+                                <button class="action-icon" title="Download Folder as ZIP" onclick="downloadFolder('${fullFilePath}')">
+                                    <svg viewBox="0 0 24 24" style="fill: #a3e635;"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+                                </button>`}
+                            </div>
                         </td>
                     `;
                     list.appendChild(tr);
@@ -1406,6 +1573,10 @@
 
         function downloadCurrentFolder() {
             window.location.href = `/api/download-folder?path=${encodeURIComponent(currentPath)}`;
+        }
+
+        function downloadFolder(pathStr) {
+            window.location.href = `/api/download-folder?path=${encodeURIComponent(pathStr)}`;
         }
 
         function updateBreadcrumbs() {
