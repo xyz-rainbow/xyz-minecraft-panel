@@ -653,8 +653,8 @@ const server = http.createServer((req, res) => {
             });
             
             const { spawn } = require('child_process');
-            // Added -n .jar to avoid re-compressing mods, speeding up the process
-            const zipProc = spawn('zip', ['-1', '-n', '.jar', '-r', '-', '.', '-x', 'backups/*', '-x', 'lost+found/*'], { cwd: targetPath });
+            // Optimization: Level 0 (Store Only) and -n .jar:.zip to avoid corruption and CPU overload
+            const zipProc = spawn('zip', ['-0', '-n', '.jar:.zip', '-r', '-', '.', '-x', 'backups/*', '-x', 'lost+found/*'], { cwd: targetPath });
             
             activeZipDownloads.set(targetPath, zipProc);
 
@@ -771,7 +771,8 @@ const server = http.createServer((req, res) => {
                 })
                 .then((wasLocked) => {
                     // Start the compression command
-                    const cmd = `zip -1 -r -q "${zipPath}" . -x "backups/*" -x "lost+found/*"`;
+                    // Optimization: Level 0 (Store Only) and -n .jar:.zip for maximum integrity
+                    const cmd = `zip -0 -n .jar:.zip -r -q "${zipPath}" . -x "backups/*" -x "lost+found/*"`;
                     console.log(`[Backup] Executing compression: ${cmd}`);
                     exec(cmd, { cwd: DATA_DIR }, (err, stdout, stderr) => {
                         if (err) {
