@@ -14,11 +14,17 @@ const STATE_FILE = path.join(DATA_DIR, '.server_state');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 let backupInProgress = false;
 let restoreInProgress = false;
-let backupState = {
+let backupState = { 
     active: false,
     zipPath: null,
     startTime: null,
     label: '',
+    estimatedTotalBytes: 0,
+};
+let restoreState = {
+    active: false,
+    zipPath: null,
+    startTime: null,
     estimatedTotalBytes: 0,
 };
 const activeZipDownloads = new Map();
@@ -828,46 +834,72 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // API Endpoint: Backup Status (for progress bar - server-side state, client-independent)
+    // API Endpoint: Backup & Restore Status (for progress bar - server-side state, client-independent)
     if (pathname === '/api/backups/status') {
-        if (!backupState.active) {
+        if (!backupState.active && !restoreState.active) {
             return sendJSON(res, { active: false });
         }
         
-        // zip writes to a random temp file first, then renames to final .zip
-        // So we measure ALL files newer than backup start time in BACKUPS_DIR
-        let currentBytes = 0;
-        try {
-            if (fs.existsSync(BACKUPS_DIR)) {
-                fs.readdirSync(BACKUPS_DIR).forEach(f => {
-                    const fp = path.join(BACKUPS_DIR, f);
-                    try {
-                        const st = fs.statSync(fp);
-                        if (st.mtimeMs >= backupState.startTime - 5000) {
-                            currentBytes = Math.max(currentBytes, st.size);
-                        }
-                    } catch (e) {}
-                });
+        if (backupState.active) {
+            // zip writes to a random temp file first, then renames to final .zip
+            // So we measure ALL files newer than backup start time in BACKUPS_DIR
+            let currentBytes = 0;
+            try {
+                if (fs.existsSync(BACKUPS_DIR)) {
+                    fs.readdirSync(BACKUPS_DIR).forEach(f => {
+                        const fp = path.join(BACKUPS_DIR, f);
+                        try {
+                            const st = fs.statSync(fp);
+                            if (st.mtimeMs >= backupState.startTime - 5000) {
+                                currentBytes = Math.max(currentBytes, st.size);
+                            }
+                        } catch (e) {}
+                    });
+                } 
+            } catch (e) {}
+            
+            const elapsed = Math.floor((Date.now() - backupState.startTime) / 1000);
+            let percent = 0;
+            if (backupState.estimatedTotalBytes > 0) {
+                percent = Math.min(99, Math.floor((currentBytes / backupState.estimatedTotalBytes) * 100));
+            } else {
+                percent = Math.min(99, Math.floor(elapsed / 1800 * 100));
             }
-        } catch (e) {}
-        
-        const elapsed = Math.floor((Date.now() - backupState.startTime) / 1000);
-        let percent = 0;
-        if (backupState.estimatedTotalBytes > 0) {
-            percent = Math.min(99, Math.floor((currentBytes / backupState.estimatedTotalBytes) * 100));
-        } else {
-            // No size estimate: use elapsed time heuristic (assume ~30min backup max)
-            percent = Math.min(99, Math.floor(elapsed / 1800 * 100));
+            
+            return sendJSON(res, {
+                active: true,
+                type: 'backup',
+                percent,
+                elapsed,
+                label: backupState.label,
+                currentBytes,
+                estimatedTotalBytes: backupState.estimatedTotalBytes,
+            });
         }
         
-        return sendJSON(res, {
-            active: true,
-            percent,
-            elapsed,
-            label: backupState.label,
-            currentBytes,
-            estimatedTotalBytes: backupState.estimatedTotalBytes,
-        });
+        if (restoreState.active) {
+            const elapsed = Math.floor((Date.now() - restoreState.startTime) / 1000);
+            // Measure files in DATA_DIR excluding backups and lost+found to track extraction
+            exec(`du -sb "${DATA_DIR}" --exclude="${DATA_DIR}/backups" --exclude="${DATA_DIR}/lost+found" 2>/dev/null | awk '{print $1}'`, (err, stdout) => {
+                const currentBytes = parseInt(stdout.trim()) || 0;
+                let percent = 0;
+                if (restoreState.estimatedTotalBytes > 0) {
+                    percent = Math.min(99, Math.floor((currentBytes / restoreState.estimatedTotalBytes) * 100));
+                } else {
+                    percent = Math.min(99, Math.floor(elapsed / 120 * 100)); // assume 2 min fallback
+                }
+                
+                sendJSON(res, {
+                    active: true,
+                    type: 'restore',
+                    percent,
+                    elapsed,
+                    currentBytes,
+                    estimatedTotalBytes: restoreState.estimatedTotalBytes,
+                });
+            });
+            return;
+        }
     }
 
     // API Endpoint: Delete Backup
@@ -939,6 +971,17 @@ const server = http.createServer((req, res) => {
                 }
                 
                 restoreInProgress = true;
+                restoreState = {
+                    active: true,
+                    zipPath: zipPath,
+                    startTime: Date.now(),
+                    estimatedTotalBytes: 0,
+                };
+                
+                try {
+                    restoreState.estimatedTotalBytes = fs.statSync(zipPath).size;
+                } catch (e) {}
+                
                 setTargetState('stopped');
                 
                 console.log('[Restore] Stopping Minecraft server for restoration...');
@@ -963,7 +1006,7 @@ const server = http.createServer((req, res) => {
                                     pending--;
                                     if (pending === 0) performUnzip();
                                     return;
-                                }
+                                } 
                                 
                                 const itemPath = path.join(DATA_DIR, item);
                                 fs.rm(itemPath, { recursive: true, force: true }, (errrm) => {
@@ -975,18 +1018,20 @@ const server = http.createServer((req, res) => {
                         });
                     });
                 
-                function performUnzip() {
+                function performUnzip() { 
                     console.log(`[Restore] Extracting backup ${zipPath}...`);
                     exec(`unzip -q -o "${zipPath}" -d "${DATA_DIR}"`, (err, stdout, stderr) => {
                         if (err) {
                             console.error('[Restore] Unzip failed:', err.message);
                             restoreInProgress = false;
+                            restoreState.active = false;
                             return;
                         }
                         
                         console.log('[Restore] Unzip completed. Restarting Minecraft server...');
                         setTargetState('running');
                         restoreInProgress = false;
+                        restoreState.active = false;
                     });
                 }
                 

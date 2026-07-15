@@ -804,8 +804,8 @@
             pointer-events: none;
         }
 
-        /* Floating Backup Progress Bar */
-        #backup-progress-bar {
+        /* Floating Progress Bar (Backup/Restore) */
+        #operation-progress-bar {
             display: none;
             position: fixed;
             bottom: 24px;
@@ -813,49 +813,78 @@
             transform: translateX(-50%);
             width: min(520px, 90vw);
             z-index: 9999;
-            background: #1a0a0a;
-            border: 2px solid #1a1a1a;
             border-radius: 16px;
             padding: 14px 20px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 20px rgba(220, 38, 38, 0.2);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
+            transition: all 0.3s ease;
         }
-        #backup-progress-bar .bp-header {
+        
+        /* Backup Style */
+        #operation-progress-bar.type-backup {
+            background: rgba(26, 10, 10, 0.90);
+            border: 2px solid rgba(239, 68, 68, 0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 20px rgba(239, 68, 68, 0.25);
+        }
+        #operation-progress-bar.type-backup .bp-title {
+            color: #fca5a5;
+        }
+        #operation-progress-bar.type-backup .bp-percent {
+            color: #ef4444;
+        }
+        #operation-progress-bar.type-backup .bp-fill {
+            background: linear-gradient(90deg, #7f1d1d, #ef4444, #f87171);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+        }
+        
+        /* Restore Style */
+        #operation-progress-bar.type-restore {
+            background: rgba(10, 20, 26, 0.90);
+            border: 2px solid rgba(6, 182, 212, 0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 20px rgba(6, 182, 212, 0.25);
+        }
+        #operation-progress-bar.type-restore .bp-title {
+            color: #a5f3fc;
+        }
+        #operation-progress-bar.type-restore .bp-percent {
+            color: #06b6d4;
+        }
+        #operation-progress-bar.type-restore .bp-fill {
+            background: linear-gradient(90deg, #083344, #06b6d4, #67e8f9);
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
+        }
+
+        .bp-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 10px;
         }
-        #backup-progress-bar .bp-title {
+        .bp-title {
             font-size: 0.82rem;
             font-weight: 600;
-            color: #fca5a5;
             letter-spacing: 0.04em;
             text-transform: uppercase;
         }
-        #backup-progress-bar .bp-percent {
+        .bp-percent {
             font-family: var(--font-mono, monospace);
             font-size: 0.85rem;
             font-weight: 700;
-            color: #ef4444;
         }
-        #backup-progress-bar .bp-track {
+        .bp-track {
             width: 100%;
             height: 8px;
-            background: rgba(255,255,255,0.06);
+            background: rgba(255, 255, 255, 0.06);
             border-radius: 999px;
             overflow: hidden;
         }
-        #backup-progress-bar .bp-fill {
+        .bp-fill {
             height: 100%;
-            background: linear-gradient(90deg, #7f1d1d, #ef4444, #f87171);
             border-radius: 999px;
             width: 0%;
             transition: width 0.8s ease;
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
         }
-        #backup-progress-bar .bp-info {
+        .bp-info {
             margin-top: 7px;
             font-size: 0.75rem;
             color: #6b7280;
@@ -866,10 +895,10 @@
 </head>
 <body>
 
-    <!-- Floating Backup Progress Bar -->
-    <div id="backup-progress-bar">
+    <!-- Floating Operation Progress Bar -->
+    <div id="operation-progress-bar">
         <div class="bp-header">
-            <span class="bp-title">⚙ Creating Backup...</span>
+            <span class="bp-title" id="bp-title-text">⚙ Working...</span>
             <span class="bp-percent" id="bp-percent-text">0%</span>
         </div>
         <div class="bp-track">
@@ -1078,7 +1107,7 @@
             }
         };
 
-        function showDashboard() {
+        function showDashboard() { 
             document.getElementById('login-wrapper').style.display = 'none';
             document.getElementById('dashboard-rgb-wrapper').style.display = 'block';
             document.getElementById('dashboard-container').style.display = 'grid';
@@ -1086,8 +1115,8 @@
             startLogStream();
             loadDir('');
             setupBackupsDragAndDrop();
-            // Auto-detect any backup already running on the server
-            startBackupProgressPolling();
+            // Auto-detect any backup or restore already running on the server
+            startProgressPolling();
         }
 
         async function login() {
@@ -1197,17 +1226,18 @@
             }
         }
 
-        // Backup progress polling — driven by server state, survives page navigation
-        let backupPollInterval = null;
+        // General operation progress polling (Backup & Restore) — driven by server state, survives page navigation
+        let progressPollInterval = null;
 
-        function startBackupProgressPolling() {
-            if (backupPollInterval) return; // already polling
-            backupPollInterval = setInterval(async () => {
+        function startProgressPolling() { 
+            if (progressPollInterval) return; // already polling
+            progressPollInterval = setInterval(async () => {
                 try {
                     const res = await fetch('/api/backups/status');
                     const data = await res.json();
 
-                    const bar = document.getElementById('backup-progress-bar');
+                    const bar = document.getElementById('operation-progress-bar');
+                    const title = document.getElementById('bp-title-text');
                     const fill = document.getElementById('bp-fill');
                     const pct = document.getElementById('bp-percent-text');
                     const lbl = document.getElementById('bp-label');
@@ -1215,23 +1245,40 @@
 
                     if (data.active) {
                         bar.style.display = 'block';
+                        bar.className = 'type-' + data.type; // 'type-backup' or 'type-restore'
+                        
+                        if (data.type === 'backup') {
+                            title.textContent = '⚙ Creating Backup...';
+                            lbl.textContent = data.label ? '📦 ' + data.label : '';
+                            backupInProgress = true;
+                            restoreInProgress = false;
+                        } else if (data.type === 'restore') {
+                            title.textContent = '🔄 Restoring Backup...';
+                            lbl.textContent = '⚠️ Overwriting server files';
+                            backupInProgress = false;
+                            restoreInProgress = true;
+                        }
+
                         fill.style.width = data.percent + '%';
                         pct.textContent = data.percent + '%';
-                        lbl.textContent = data.label ? '📦 ' + data.label : '';
+                        
                         const mins = Math.floor(data.elapsed / 60);
                         const secs = data.elapsed % 60;
                         elapsed.textContent = `⏱ ${mins}m ${secs}s`;
 
                         // Keep button blocked
                         const btnCreate = document.getElementById('btn-create-backup');
-                        if (btnCreate) { btnCreate.innerText = 'Creating Backup...'; btnCreate.disabled = true; }
-                        backupInProgress = true;
+                        if (btnCreate) {
+                            btnCreate.innerText = data.type === 'backup' ? 'Creating Backup...' : 'Restoring in progress...';
+                            btnCreate.disabled = true;
+                        }
                     } else {
                         // Finished
                         bar.style.display = 'none';
-                        clearInterval(backupPollInterval);
-                        backupPollInterval = null;
+                        clearInterval(progressPollInterval);
+                        progressPollInterval = null;
                         backupInProgress = false;
+                        restoreInProgress = false;
                         const btnCreate = document.getElementById('btn-create-backup');
                         if (btnCreate) { btnCreate.innerText = 'Create Backup'; btnCreate.disabled = false; }
                         loadBackups();
@@ -1261,7 +1308,7 @@
                 if (data.success) {
                     labelInput.value = '';
                     backupInProgress = true;
-                    startBackupProgressPolling();
+                    startProgressPolling();
                 } else {
                     alert('Error creating backup: ' + data.error);
                     btnCreate.innerText = 'Create Backup';
@@ -1319,7 +1366,9 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('Restoration process started in the background. The server is restarting, please wait a minute.');
+                    restoreInProgress = true;
+                    startProgressPolling();
+                    // Do not block navigation, show progress and switch to console view to see the restart logs
                     switchView('console', document.querySelector('.nav-menu .nav-item'));
                 } else {
                     alert('Error starting restoration: ' + data.error);
