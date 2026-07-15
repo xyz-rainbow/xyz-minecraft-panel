@@ -763,12 +763,6 @@ const server = http.createServer((req, res) => {
                 estimatedTotalBytes: 0,
             };
             
-            // Pre-estimate total data size for progress
-            exec(`du -sb "${DATA_DIR}" --exclude="${DATA_DIR}/backups" 2>/dev/null | awk '{print $1}'`, (err, stdout) => {
-                const estimated = parseInt(stdout.trim()) || 0;
-                backupState.estimatedTotalBytes = estimated;
-            });
-            
             // Format file name
             const now = new Date();
             const pad = (n) => String(n).padStart(2, '0');
@@ -781,55 +775,59 @@ const server = http.createServer((req, res) => {
             if (!fs.existsSync(BACKUPS_DIR)) {
                 try { fs.mkdirSync(BACKUPS_DIR, { recursive: true }); } catch (e) {}
             }
+
+            const wasRunning = getTargetState() === 'running';
             
-            // Check if server is online via SLP
-            const rcon = getRconConfig();
-            pingMinecraft('127.0.0.1', rcon.gamePort)
-                .then(() => {
-                    // Server is online, run RCON save-off & save-all flush
-                    console.log('[Backup] Server is online. Pausing autosave...');
-                    return sendRconCommand('save-off')
-                        .then(() => sendRconCommand('save-all flush'))
-                        .then(() => true)
-                        .catch(err => {
-                            console.error('[Backup] RCON commands failed, proceeding without lock:', err.message);
-                            return false; // proceed without lock
-                        });
-                })
-                .catch(() => {
-                    // Server is offline, proceed directly
-                    console.log('[Backup] Server is offline. Proceeding directly...');
-                    return Promise.resolve(false);
-                })
-                .then((wasLocked) => {
-                    // Start the compression command
-                    // Optimization: Level 0 (Store Only) and -n .jar:.zip for maximum integrity
-                    const cmd = `zip -0 -n .jar:.zip -r -q "${zipPath}" . -x "backups/*" -x "lost+found/*"`;
-                    console.log(`[Backup] Executing compression: ${cmd}`);
-                    exec(cmd, { cwd: DATA_DIR }, (err, stdout, stderr) => {
-                        if (err) {
-                                console.error('[Backup] Compression failed:', err.message);
-                            } else {
-                                console.log('[Backup] Compression completed successfully.');
-                            }
-                            
-                            // Turn autosave back on if it was locked
-                            if (wasLocked) {
-                                console.log('[Backup] Resuming autosave...');
-                                sendRconCommand('save-on')
-                                    .catch(err => console.error('[Backup] Failed to resume autosave:', err.message))
-                                    .finally(() => {
-                                        backupInProgress = false;
-                                        backupState.active = false;
-                                    });
-                            } else {
-                                backupInProgress = false;
-                                backupState.active = false;
-                            }
-                    });
-                    
-                    sendJSON(res, { success: true, message: 'Backup started in background' });
+            // Set state to stopped so the wrapper doesn't boot it back up immediately
+            setTargetState('stopped');
+            
+            console.log('[Backup] Stopping Minecraft server for backup...');
+            
+            const runBackupZip = () => {
+                console.log('[Backup] Server stopped. Pre-estimating total data size...');
+                // Pre-estimate total data size for progress
+                exec(`du -sb "${DATA_DIR}" --exclude="${DATA_DIR}/backups" 2>/dev/null | awk '{print $1}'`, (err, stdout) => {
+                    const estimated = parseInt(stdout.trim()) || 0;
+                    backupState.estimatedTotalBytes = estimated;
                 });
+                
+                // Start the compression command
+                // Optimization: Level 0 (Store Only) and -n .jar:.zip for maximum integrity
+                const cmd = `zip -0 -n .jar:.zip -r -q "${zipPath}" . -x "backups/*" -x "lost+found/*"`;
+                console.log(`[Backup] Executing compression: ${cmd}`);
+                exec(cmd, { cwd: DATA_DIR }, (err, stdout, stderr) => {
+                    if (err) {
+                        console.error('[Backup] Compression failed:', err.message);
+                    } else {
+                        console.log('[Backup] Compression completed successfully.');
+                    }
+                    
+                    // Restart the server if it was running before
+                    if (wasRunning) {
+                        console.log('[Backup] Restarting Minecraft server (restoring running state)...');
+                        setTargetState('running');
+                    }
+                    
+                    backupInProgress = false;
+                    backupState.active = false;
+                });
+            };
+
+            // Trigger stop
+            sendRconCommand('stop')
+                .catch(err => {
+                    console.log('[Backup] RCON stop failed, forcing pkill: ', err.message);
+                    return new Promise((resolve) => exec('pkill -f java', resolve));
+                })
+                .then(() => {
+                    // Wait 3 seconds for the server port/java process to completely stop
+                    return new Promise((resolve) => setTimeout(resolve, 3000));
+                })
+                .then(() => {
+                    runBackupZip();
+                });
+            
+            sendJSON(res, { success: true, message: 'Backup started in background. Server will stop and restart.' });
         });
         return;
     }
