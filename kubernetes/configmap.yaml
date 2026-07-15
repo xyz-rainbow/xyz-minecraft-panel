@@ -2004,9 +2004,9 @@ data:
 
             .sftp-grid {
                 padding: 1.25rem 1.5rem;
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 1.5rem;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 1.5rem 2rem;
             }
 
             .sftp-field {
