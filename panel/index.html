@@ -1067,6 +1067,12 @@
                         </svg>
                         Backups
                     </li>
+                    <li class="nav-item" onclick="switchView('connection', this)">
+                        <svg style="width: 18px; height: 18px; fill: currentColor; margin-right: 0.5rem;" viewBox="0 0 24 24">
+                            <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+                        </svg>
+                        Connection
+                    </li>
                 </ul>
             </div>
             <div class="nav-item logout-btn" onclick="logout()">
@@ -1174,14 +1180,25 @@
                     </table>
                 </div>
 
-                <!-- SFTP Info Section -->
-                <div class="sftp-info-container">
-                    <button class="sftp-toggle-btn" onclick="toggleSftpInfo()">
-                        <span>🔑 SFTP Connection Info</span>
-                        <svg class="chevron-icon" id="sftp-chevron" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
-                    </button>
-                    <div class="sftp-content" id="sftp-content-wrapper">
-                        <div class="sftp-grid">
+            </div>
+
+            <!-- Connection Info View -->
+            <div id="view-connection" class="view">
+                <div class="file-actions">
+                    <div class="breadcrumbs">
+                        <span style="font-weight:600; color:white;">Server Connection Info</span>
+                    </div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 2rem; margin-top: 1rem;">
+                    <!-- SFTP Section -->
+                    <div style="border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(10, 8, 22, 0.4); padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                        <h3 style="color: white; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                            <span>🔑 SFTP Connection</span>
+                            <span style="font-size: 0.8rem; background: rgba(6, 182, 212, 0.15); color: var(--accent-secondary); padding: 0.2rem 0.5rem; border-radius: 20px;">File Transfer</span>
+                        </h3>
+                        <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.5;">Use any SFTP client (like FileZilla, WinSCP, or Cyberduck) to upload, download, and manage your server files directly.</p>
+                        <div class="sftp-grid" style="padding: 0; margin-top: 0.5rem;">
                             <div class="sftp-field">
                                 <label>Host</label>
                                 <span>minecraft.rainbowtechnology.xyz</span>
@@ -1197,6 +1214,28 @@
                             <div class="sftp-field">
                                 <label>Password</label>
                                 <span class="password-field" onclick="copyText('minecraft')">minecraft <small>(click to copy)</small></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Direct Connection Section -->
+                    <div style="border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(10, 8, 22, 0.4); padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                        <h3 style="color: white; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                            <span>🎮 Minecraft Client Connection</span>
+                            <span style="font-size: 0.8rem; background: rgba(132, 204, 22, 0.15); color: var(--accent-lime); padding: 0.2rem 0.5rem; border-radius: 20px;">Game IP</span>
+                        </h3>
+                        <div class="sftp-grid" style="padding: 0; margin-top: 0.5rem;">
+                            <div class="sftp-field">
+                                <label>Server Address (IP)</label>
+                                <span class="password-field" onclick="copyText('minecraft.rainbowtechnology.xyz')">minecraft.rainbowtechnology.xyz <small>(click to copy)</small></span>
+                            </div>
+                            <div class="sftp-field">
+                                <label>Standard Game Port</label>
+                                <span>25565</span>
+                            </div>
+                            <div class="sftp-field">
+                                <label>Simple Voice Chat Port</label>
+                                <span>24454 (UDP)</span>
                             </div>
                         </div>
                     </div>
@@ -2046,13 +2085,6 @@
             dragOverlay.style.display = 'none';
             handleFileUpload(e.dataTransfer.files);
         });
-
-        function toggleSftpInfo() {
-            const wrapper = document.getElementById('sftp-content-wrapper');
-            const chevron = document.getElementById('sftp-chevron');
-            wrapper.classList.toggle('open');
-            chevron.classList.toggle('open');
-        }
 
         function copyText(text) {
             navigator.clipboard.writeText(text).then(() => {
