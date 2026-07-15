@@ -266,8 +266,38 @@ data:
     \           border: 2px dashed var(--accent-primary);\n            border-radius:
     12px;\n            align-items: center;\n            justify-content: center;\n
     \           font-size: 1.2rem;\n            font-weight: 600;\n            z-index:
-    10;\n            pointer-events: none;\n        }\n    </style>\n</head>\n<body>\n\n
-    \   <!-- Login Container -->\n    <div id=\"login-wrapper\">\n        <div class=\"rgb-border-wrapper\">\n
+    10;\n            pointer-events: none;\n        }\n\n        /* Floating Backup
+    Progress Bar */\n        #backup-progress-bar {\n            display: none;\n
+    \           position: fixed;\n            bottom: 24px;\n            left: 50%;\n
+    \           transform: translateX(-50%);\n            width: min(520px, 90vw);\n
+    \           z-index: 9999;\n            background: #1a0a0a;\n            border:
+    2px solid #1a1a1a;\n            border-radius: 16px;\n            padding: 14px
+    20px;\n            box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 20px rgba(220,
+    38, 38, 0.2);\n            backdrop-filter: blur(12px);\n            -webkit-backdrop-filter:
+    blur(12px);\n        }\n        #backup-progress-bar .bp-header {\n            display:
+    flex;\n            justify-content: space-between;\n            align-items: center;\n
+    \           margin-bottom: 10px;\n        }\n        #backup-progress-bar .bp-title
+    {\n            font-size: 0.82rem;\n            font-weight: 600;\n            color:
+    #fca5a5;\n            letter-spacing: 0.04em;\n            text-transform: uppercase;\n
+    \       }\n        #backup-progress-bar .bp-percent {\n            font-family:
+    var(--font-mono, monospace);\n            font-size: 0.85rem;\n            font-weight:
+    700;\n            color: #ef4444;\n        }\n        #backup-progress-bar .bp-track
+    {\n            width: 100%;\n            height: 8px;\n            background:
+    rgba(255,255,255,0.06);\n            border-radius: 999px;\n            overflow:
+    hidden;\n        }\n        #backup-progress-bar .bp-fill {\n            height:
+    100%;\n            background: linear-gradient(90deg, #7f1d1d, #ef4444, #f87171);\n
+    \           border-radius: 999px;\n            width: 0%;\n            transition:
+    width 0.8s ease;\n            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);\n        }\n
+    \       #backup-progress-bar .bp-info {\n            margin-top: 7px;\n            font-size:
+    0.75rem;\n            color: #6b7280;\n            display: flex;\n            justify-content:
+    space-between;\n        }\n    </style>\n</head>\n<body>\n\n    <!-- Floating
+    Backup Progress Bar -->\n    <div id=\"backup-progress-bar\">\n        <div class=\"bp-header\">\n
+    \           <span class=\"bp-title\">⚙ Creating Backup...</span>\n            <span
+    class=\"bp-percent\" id=\"bp-percent-text\">0%</span>\n        </div>\n        <div
+    class=\"bp-track\">\n            <div class=\"bp-fill\" id=\"bp-fill\"></div>\n
+    \       </div>\n        <div class=\"bp-info\">\n            <span id=\"bp-label\"></span>\n
+    \           <span id=\"bp-elapsed\"></span>\n        </div>\n    </div>\n\n    <!--
+    Login Container -->\n    <div id=\"login-wrapper\">\n        <div class=\"rgb-border-wrapper\">\n
     \           <div id=\"login-container\">\n                <h1><span class=\"lime-text\">Minecraft</span>
     Control Panel</h1>\n                <p>Enter administrative credentials to log
     in.</p>\n                <div class=\"input-group\">\n                    <label
@@ -386,8 +416,9 @@ data:
     = 'none';\n            document.getElementById('dashboard-rgb-wrapper').style.display
     = 'block';\n            document.getElementById('dashboard-container').style.display
     = 'grid';\n            startStatusPolling();\n            startLogStream();\n
-    \           loadDir('');\n            setupBackupsDragAndDrop();\n        }\n\n
-    \       async function login() {\n            const u = document.getElementById('username').value;\n
+    \           loadDir('');\n            setupBackupsDragAndDrop();\n            //
+    Auto-detect any backup already running on the server\n            startBackupProgressPolling();\n
+    \       }\n\n        async function login() {\n            const u = document.getElementById('username').value;\n
     \           const p = document.getElementById('password').value;\n            try
     {\n                const res = await fetch('/api/login', {\n                    method:
     'POST',\n                    headers: { 'Content-Type': 'application/json' },\n
@@ -448,25 +479,49 @@ data:
     \                           </div>\n                        </td>\n                    `;\n
     \                   listContainer.appendChild(row);\n                });\n            }
     catch (e) {\n                console.error('Failed to fetch backups:', e);\n            }\n
-    \       }\n\n        async function createBackup() {\n            if (backupInProgress
-    || restoreInProgress) return;\n            const labelInput = document.getElementById('backup-label');\n
-    \           const label = labelInput.value.trim();\n            \n            try
-    {\n                const btnCreate = document.getElementById('btn-create-backup');\n
-    \               btnCreate.innerText = 'Creating Backup...';\n                btnCreate.disabled
-    = true;\n                backupInProgress = true;\n                \n                const
-    res = await fetch('/api/backups/create', {\n                    method: 'POST',\n
-    \                   headers: { 'Content-Type': 'application/json' },\n                    body:
-    JSON.stringify({ label })\n                });\n                const data = await
-    res.json();\n                if (data.success) {\n                    labelInput.value
-    = '';\n                    const pollInterval = setInterval(async () => {\n                        const
-    statusRes = await fetch('/api/backups');\n                        const statusData
-    = await statusRes.json();\n                        if (!statusData.backupInProgress)
-    {\n                            clearInterval(pollInterval);\n                            loadBackups();\n
-    \                       }\n                    }, 2000);\n                } else
-    {\n                    alert('Error creating backup: ' + data.error);\n                    loadBackups();\n
-    \               }\n            } catch (e) {\n                alert('Backup request
-    failed');\n                loadBackups();\n            }\n        }\n\n        function
-    downloadBackup(filename) {\n            window.location.href = `/api/backups/download?path=${encodeURIComponent(filename)}`;\n
+    \       }\n\n        // Backup progress polling — driven by server state, survives
+    page navigation\n        let backupPollInterval = null;\n\n        function startBackupProgressPolling()
+    {\n            if (backupPollInterval) return; // already polling\n            backupPollInterval
+    = setInterval(async () => {\n                try {\n                    const
+    res = await fetch('/api/backups/status');\n                    const data = await
+    res.json();\n\n                    const bar = document.getElementById('backup-progress-bar');\n
+    \                   const fill = document.getElementById('bp-fill');\n                    const
+    pct = document.getElementById('bp-percent-text');\n                    const lbl
+    = document.getElementById('bp-label');\n                    const elapsed = document.getElementById('bp-elapsed');\n\n
+    \                   if (data.active) {\n                        bar.style.display
+    = 'block';\n                        fill.style.width = data.percent + '%';\n                        pct.textContent
+    = data.percent + '%';\n                        lbl.textContent = data.label ?
+    '\U0001F4E6 ' + data.label : '';\n                        const mins = Math.floor(data.elapsed
+    / 60);\n                        const secs = data.elapsed % 60;\n                        elapsed.textContent
+    = `⏱ ${mins}m ${secs}s`;\n\n                        // Keep button blocked\n                        const
+    btnCreate = document.getElementById('btn-create-backup');\n                        if
+    (btnCreate) { btnCreate.innerText = 'Creating Backup...'; btnCreate.disabled =
+    true; }\n                        backupInProgress = true;\n                    }
+    else {\n                        // Finished\n                        bar.style.display
+    = 'none';\n                        clearInterval(backupPollInterval);\n                        backupPollInterval
+    = null;\n                        backupInProgress = false;\n                        const
+    btnCreate = document.getElementById('btn-create-backup');\n                        if
+    (btnCreate) { btnCreate.innerText = 'Create Backup'; btnCreate.disabled = false;
+    }\n                        loadBackups();\n                    }\n                }
+    catch (e) {\n                    // silently ignore network errors during polling\n
+    \               }\n            }, 1500);\n        }\n\n        async function
+    createBackup() {\n            if (backupInProgress || restoreInProgress) return;\n
+    \           const labelInput = document.getElementById('backup-label');\n            const
+    label = labelInput.value.trim();\n            \n            try {\n                const
+    btnCreate = document.getElementById('btn-create-backup');\n                btnCreate.innerText
+    = 'Starting...';\n                btnCreate.disabled = true;\n                \n
+    \               const res = await fetch('/api/backups/create', {\n                    method:
+    'POST',\n                    headers: { 'Content-Type': 'application/json' },\n
+    \                   body: JSON.stringify({ label })\n                });\n                const
+    data = await res.json();\n                if (data.success) {\n                    labelInput.value
+    = '';\n                    backupInProgress = true;\n                    startBackupProgressPolling();\n
+    \               } else {\n                    alert('Error creating backup: '
+    + data.error);\n                    btnCreate.innerText = 'Create Backup';\n                    btnCreate.disabled
+    = false;\n                }\n            } catch (e) {\n                alert('Backup
+    request failed');\n                const btnCreate = document.getElementById('btn-create-backup');\n
+    \               if (btnCreate) { btnCreate.innerText = 'Create Backup'; btnCreate.disabled
+    = false; }\n            }\n        }\n\n\n        function downloadBackup(filename)
+    {\n            window.location.href = `/api/backups/download?path=${encodeURIComponent(filename)}`;\n
     \       }\n\n        async function deleteBackup(filename) {\n            if (!confirm(`Are
     you sure you want to permanently delete backup \"${filename}\"?\\nThis action
     cannot be undone.`)) {\n                return;\n            }\n            if
@@ -765,12 +820,13 @@ data:
     PANEL_USER = process.env.PANEL_USERNAME || 'admin';\nconst PANEL_PASS = process.env.PANEL_PASSWORD
     || 'admin';\nconst SESSION_COOKIE = 'panel_session';\nconst STATE_FILE = path.join(DATA_DIR,
     '.server_state');\nconst BACKUPS_DIR = path.join(DATA_DIR, 'backups');\nlet backupInProgress
-    = false;\nlet restoreInProgress = false;\nconst activeZipDownloads = new Map();\n\n//
-    Helper to parse server.properties\nfunction getRconConfig() {\n    try {\n        const
-    content = fs.readFileSync(path.join(DATA_DIR, 'server.properties'), 'utf8');\n
-    \       const config = {};\n        content.split('\\n').forEach(line => {\n            if
-    (line.startsWith('#') || !line.includes('=')) return;\n            const [key,
-    ...valParts] = line.split('=');\n            config[key.trim()] = valParts.join('=').trim();\n
+    = false;\nlet restoreInProgress = false;\nlet backupState = {\n    active: false,\n
+    \   zipPath: null,\n    startTime: null,\n    label: '',\n    estimatedTotalBytes:
+    0,\n};\nconst activeZipDownloads = new Map();\n\n// Helper to parse server.properties\nfunction
+    getRconConfig() {\n    try {\n        const content = fs.readFileSync(path.join(DATA_DIR,
+    'server.properties'), 'utf8');\n        const config = {};\n        content.split('\\n').forEach(line
+    => {\n            if (line.startsWith('#') || !line.includes('=')) return;\n            const
+    [key, ...valParts] = line.split('=');\n            config[key.trim()] = valParts.join('=').trim();\n
     \       });\n        return {\n            enabled: config['enable-rcon'] ===
     'true',\n            port: parseInt(config['rcon.port']) || 25575,\n            password:
     config['rcon.password'] || '',\n            gamePort: parseInt(config['server-port'])
@@ -890,10 +946,11 @@ data:
     '*');\n    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');\n    res.setHeader('Access-Control-Allow-Methods',
     'GET, POST, OPTIONS');\n\n    if (req.method === 'OPTIONS') {\n        res.writeHead(200);\n
     \       res.end();\n        return;\n    }\n\n    // Static Files: Serve single-file
-    dashboard\n    if (pathname === '/' || pathname === '/index.html') {\n        fs.readFile(path.join(__dirname,
-    'index.html'), 'utf8', (err, content) => {\n            if (err) {\n                res.writeHead(500,
+    dashboard\n    if (pathname === '/' || pathname === '/index.html') {\n        const
+    htmlPath = path.resolve('/app/index.html');\n        fs.readFile(htmlPath, 'utf8',
+    (err, content) => {\n            if (err) {\n                res.writeHead(500,
     { 'Content-Type': 'text/plain' });\n                res.end('Error loading dashboard
-    page');\n                return;\n            }\n            res.writeHead(200,
+    page: ' + err.message);\n                return;\n            }\n            res.writeHead(200,
     { 'Content-Type': 'text/html' });\n            res.end(content);\n        });\n
     \       return;\n    }\n\n    // API Endpoint: Login\n    if (pathname === '/api/login')
     {\n        if (req.method !== 'POST') return sendJSON(res, { error: 'Method not
@@ -1083,21 +1140,28 @@ data:
     () => {\n            let label = '';\n            try {\n                const
     parsed = JSON.parse(body);\n                label = parsed.label ? encodeURIComponent(parsed.label.trim().replace(/\\s+/g,
     '_')) : '';\n            } catch (e) {}\n            \n            backupInProgress
-    = true;\n            \n            // Format file name\n            const now
-    = new Date();\n            const pad = (n) => String(n).padStart(2, '0');\n            const
+    = true;\n            backupState = {\n                active: true,\n                zipPath:
+    null,\n                startTime: Date.now(),\n                label: label ||
+    'backup',\n                estimatedTotalBytes: 0,\n            };\n            \n
+    \           // Pre-estimate total data size for progress\n            exec(`du
+    -sb \"${DATA_DIR}\" --exclude=\"${DATA_DIR}/backups\" 2>/dev/null | awk '{print
+    $1}'`, (err, stdout) => {\n                const estimated = parseInt(stdout.trim())
+    || 0;\n                backupState.estimatedTotalBytes = estimated;\n            });\n
+    \           \n            // Format file name\n            const now = new Date();\n
+    \           const pad = (n) => String(n).padStart(2, '0');\n            const
     dateStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;\n
     \           const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;\n
     \           const zipName = `backup_${dateStr}_${timeStr}${label ? '_' + label
-    : ''}.zip`;\n            const zipPath = path.join(BACKUPS_DIR, zipName);\n            \n
-    \           if (!fs.existsSync(BACKUPS_DIR)) {\n                try { fs.mkdirSync(BACKUPS_DIR,
-    { recursive: true }); } catch (e) {}\n            }\n            \n            //
-    Check if server is online via SLP\n            const rcon = getRconConfig();\n
-    \           pingMinecraft('127.0.0.1', rcon.gamePort)\n                .then(()
-    => {\n                    // Server is online, run RCON save-off & save-all flush\n
-    \                   console.log('[Backup] Server is online. Pausing autosave...');\n
-    \                   return sendRconCommand('save-off')\n                        .then(()
-    => sendRconCommand('save-all flush'))\n                        .then(() => true)\n
-    \                       .catch(err => {\n                            console.error('[Backup]
+    : ''}.zip`;\n            const zipPath = path.join(BACKUPS_DIR, zipName);\n            backupState.zipPath
+    = zipPath;\n            \n            if (!fs.existsSync(BACKUPS_DIR)) {\n                try
+    { fs.mkdirSync(BACKUPS_DIR, { recursive: true }); } catch (e) {}\n            }\n
+    \           \n            // Check if server is online via SLP\n            const
+    rcon = getRconConfig();\n            pingMinecraft('127.0.0.1', rcon.gamePort)\n
+    \               .then(() => {\n                    // Server is online, run RCON
+    save-off & save-all flush\n                    console.log('[Backup] Server is
+    online. Pausing autosave...');\n                    return sendRconCommand('save-off')\n
+    \                       .then(() => sendRconCommand('save-all flush'))\n                        .then(()
+    => true)\n                        .catch(err => {\n                            console.error('[Backup]
     RCON commands failed, proceeding without lock:', err.message);\n                            return
     false; // proceed without lock\n                        });\n                })\n
     \               .catch(() => {\n                    // Server is offline, proceed
@@ -1108,22 +1172,42 @@ data:
     for maximum integrity\n                    const cmd = `zip -0 -n .jar:.zip -r
     -q \"${zipPath}\" . -x \"backups/*\" -x \"lost+found/*\"`;\n                    console.log(`[Backup]
     Executing compression: ${cmd}`);\n                    exec(cmd, { cwd: DATA_DIR
-    }, (err, stdout, stderr) => {\n                        if (err) {\n                            console.error('[Backup]
-    Compression failed:', err.message);\n                        } else {\n                            console.log('[Backup]
-    Compression completed successfully.');\n                        }\n                        \n
-    \                       // Turn autosave back on if it was locked\n                        if
-    (wasLocked) {\n                            console.log('[Backup] Resuming autosave...');\n
-    \                           sendRconCommand('save-on')\n                                .catch(err
-    => console.error('[Backup] Failed to resume autosave:', err.message))\n                                .finally(()
-    => {\n                                    backupInProgress = false;\n                                });\n
-    \                       } else {\n                            backupInProgress
-    = false;\n                        }\n                    });\n                    \n
+    }, (err, stdout, stderr) => {\n                        if (err) {\n                                console.error('[Backup]
+    Compression failed:', err.message);\n                            } else {\n                                console.log('[Backup]
+    Compression completed successfully.');\n                            }\n                            \n
+    \                           // Turn autosave back on if it was locked\n                            if
+    (wasLocked) {\n                                console.log('[Backup] Resuming
+    autosave...');\n                                sendRconCommand('save-on')\n                                    .catch(err
+    => console.error('[Backup] Failed to resume autosave:', err.message))\n                                    .finally(()
+    => {\n                                        backupInProgress = false;\n                                        backupState.active
+    = false;\n                                    });\n                            }
+    else {\n                                backupInProgress = false;\n                                backupState.active
+    = false;\n                            }\n                    });\n                    \n
     \                   sendJSON(res, { success: true, message: 'Backup started in
     background' });\n                });\n        });\n        return;\n    }\n\n
-    \   // API Endpoint: Delete Backup\n    if (pathname === '/api/backups/delete')
-    {\n        if (req.method !== 'POST') return sendJSON(res, { error: 'Method not
-    allowed' }, 405);\n        let body = '';\n        req.on('data', chunk => body
-    += chunk);\n        req.on('end', () => {\n            try {\n                const
+    \   // API Endpoint: Backup Status (for progress bar - server-side state, client-independent)\n
+    \   if (pathname === '/api/backups/status') {\n        if (!backupState.active)
+    {\n            return sendJSON(res, { active: false });\n        }\n        \n
+    \       // zip writes to a random temp file first, then renames to final .zip\n
+    \       // So we measure ALL files newer than backup start time in BACKUPS_DIR\n
+    \       let currentBytes = 0;\n        try {\n            if (fs.existsSync(BACKUPS_DIR))
+    {\n                fs.readdirSync(BACKUPS_DIR).forEach(f => {\n                    const
+    fp = path.join(BACKUPS_DIR, f);\n                    try {\n                        const
+    st = fs.statSync(fp);\n                        if (st.mtimeMs >= backupState.startTime
+    - 5000) {\n                            currentBytes = Math.max(currentBytes, st.size);\n
+    \                       }\n                    } catch (e) {}\n                });\n
+    \           }\n        } catch (e) {}\n        \n        const elapsed = Math.floor((Date.now()
+    - backupState.startTime) / 1000);\n        let percent = 0;\n        if (backupState.estimatedTotalBytes
+    > 0) {\n            percent = Math.min(99, Math.floor((currentBytes / backupState.estimatedTotalBytes)
+    * 100));\n        } else {\n            // No size estimate: use elapsed time
+    heuristic (assume ~30min backup max)\n            percent = Math.min(99, Math.floor(elapsed
+    / 1800 * 100));\n        }\n        \n        return sendJSON(res, {\n            active:
+    true,\n            percent,\n            elapsed,\n            label: backupState.label,\n
+    \           currentBytes,\n            estimatedTotalBytes: backupState.estimatedTotalBytes,\n
+    \       });\n    }\n\n    // API Endpoint: Delete Backup\n    if (pathname ===
+    '/api/backups/delete') {\n        if (req.method !== 'POST') return sendJSON(res,
+    { error: 'Method not allowed' }, 405);\n        let body = '';\n        req.on('data',
+    chunk => body += chunk);\n        req.on('end', () => {\n            try {\n                const
     { filename } = JSON.parse(body);\n                if (!filename || !filename.endsWith('.zip')
     || filename.includes('/') || filename.includes('..')) {\n                    return
     sendJSON(res, { error: 'Invalid filename' }, 400);\n                }\n                const

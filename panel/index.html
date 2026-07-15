@@ -803,9 +803,83 @@
             z-index: 10;
             pointer-events: none;
         }
+
+        /* Floating Backup Progress Bar */
+        #backup-progress-bar {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(520px, 90vw);
+            z-index: 9999;
+            background: #1a0a0a;
+            border: 2px solid #1a1a1a;
+            border-radius: 16px;
+            padding: 14px 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 20px rgba(220, 38, 38, 0.2);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        #backup-progress-bar .bp-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        #backup-progress-bar .bp-title {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #fca5a5;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        #backup-progress-bar .bp-percent {
+            font-family: var(--font-mono, monospace);
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #ef4444;
+        }
+        #backup-progress-bar .bp-track {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        #backup-progress-bar .bp-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #7f1d1d, #ef4444, #f87171);
+            border-radius: 999px;
+            width: 0%;
+            transition: width 0.8s ease;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+        }
+        #backup-progress-bar .bp-info {
+            margin-top: 7px;
+            font-size: 0.75rem;
+            color: #6b7280;
+            display: flex;
+            justify-content: space-between;
+        }
     </style>
 </head>
 <body>
+
+    <!-- Floating Backup Progress Bar -->
+    <div id="backup-progress-bar">
+        <div class="bp-header">
+            <span class="bp-title">⚙ Creating Backup...</span>
+            <span class="bp-percent" id="bp-percent-text">0%</span>
+        </div>
+        <div class="bp-track">
+            <div class="bp-fill" id="bp-fill"></div>
+        </div>
+        <div class="bp-info">
+            <span id="bp-label"></span>
+            <span id="bp-elapsed"></span>
+        </div>
+    </div>
 
     <!-- Login Container -->
     <div id="login-wrapper">
@@ -1012,6 +1086,8 @@
             startLogStream();
             loadDir('');
             setupBackupsDragAndDrop();
+            // Auto-detect any backup already running on the server
+            startBackupProgressPolling();
         }
 
         async function login() {
@@ -1121,6 +1197,51 @@
             }
         }
 
+        // Backup progress polling — driven by server state, survives page navigation
+        let backupPollInterval = null;
+
+        function startBackupProgressPolling() {
+            if (backupPollInterval) return; // already polling
+            backupPollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch('/api/backups/status');
+                    const data = await res.json();
+
+                    const bar = document.getElementById('backup-progress-bar');
+                    const fill = document.getElementById('bp-fill');
+                    const pct = document.getElementById('bp-percent-text');
+                    const lbl = document.getElementById('bp-label');
+                    const elapsed = document.getElementById('bp-elapsed');
+
+                    if (data.active) {
+                        bar.style.display = 'block';
+                        fill.style.width = data.percent + '%';
+                        pct.textContent = data.percent + '%';
+                        lbl.textContent = data.label ? '📦 ' + data.label : '';
+                        const mins = Math.floor(data.elapsed / 60);
+                        const secs = data.elapsed % 60;
+                        elapsed.textContent = `⏱ ${mins}m ${secs}s`;
+
+                        // Keep button blocked
+                        const btnCreate = document.getElementById('btn-create-backup');
+                        if (btnCreate) { btnCreate.innerText = 'Creating Backup...'; btnCreate.disabled = true; }
+                        backupInProgress = true;
+                    } else {
+                        // Finished
+                        bar.style.display = 'none';
+                        clearInterval(backupPollInterval);
+                        backupPollInterval = null;
+                        backupInProgress = false;
+                        const btnCreate = document.getElementById('btn-create-backup');
+                        if (btnCreate) { btnCreate.innerText = 'Create Backup'; btnCreate.disabled = false; }
+                        loadBackups();
+                    }
+                } catch (e) {
+                    // silently ignore network errors during polling
+                }
+            }, 1500);
+        }
+
         async function createBackup() {
             if (backupInProgress || restoreInProgress) return;
             const labelInput = document.getElementById('backup-label');
@@ -1128,9 +1249,8 @@
             
             try {
                 const btnCreate = document.getElementById('btn-create-backup');
-                btnCreate.innerText = 'Creating Backup...';
+                btnCreate.innerText = 'Starting...';
                 btnCreate.disabled = true;
-                backupInProgress = true;
                 
                 const res = await fetch('/api/backups/create', {
                     method: 'POST',
@@ -1140,23 +1260,20 @@
                 const data = await res.json();
                 if (data.success) {
                     labelInput.value = '';
-                    const pollInterval = setInterval(async () => {
-                        const statusRes = await fetch('/api/backups');
-                        const statusData = await statusRes.json();
-                        if (!statusData.backupInProgress) {
-                            clearInterval(pollInterval);
-                            loadBackups();
-                        }
-                    }, 2000);
+                    backupInProgress = true;
+                    startBackupProgressPolling();
                 } else {
                     alert('Error creating backup: ' + data.error);
-                    loadBackups();
+                    btnCreate.innerText = 'Create Backup';
+                    btnCreate.disabled = false;
                 }
             } catch (e) {
                 alert('Backup request failed');
-                loadBackups();
+                const btnCreate = document.getElementById('btn-create-backup');
+                if (btnCreate) { btnCreate.innerText = 'Create Backup'; btnCreate.disabled = false; }
             }
         }
+
 
         function downloadBackup(filename) {
             window.location.href = `/api/backups/download?path=${encodeURIComponent(filename)}`;
