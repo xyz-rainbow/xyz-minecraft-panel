@@ -1,5 +1,11 @@
 # xyz-minecraft-panel 🎮✨
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-c8ff00?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/xyz-rainbow/xyz-minecraft-panel?style=flat-square&color=00f0ff)](https://github.com/xyz-rainbow/xyz-minecraft-panel/releases)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-K3s-326ce5?style=flat-square&logo=kubernetes&logoColor=white)](https://k3s.io)
+[![Minecraft](https://img.shields.io/badge/Minecraft-NeoForge-ff2bd6?style=flat-square)](https://neoforged.net)
+[![Node.js](https://img.shields.io/badge/Node.js-panel-00f0ff?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+
 A premium, ultra-lightweight, and secure **Minecraft Web Control Panel & SFTP Sidecar** architecture designed for Kubernetes (K3s). 
 
 It features real-time log streaming (SSE), a file explorer with drag-and-drop uploads, an in-browser code editor, RCON console execution, SLP status polling, and state-loop wrapper controls to safely stop, start, and restart your server without bringing down the sidecars.
